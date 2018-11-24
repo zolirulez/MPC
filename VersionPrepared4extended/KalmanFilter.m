@@ -5,8 +5,10 @@ classdef KalmanFilter < handle
     %   different instances are needed (e.g. different predictor and
     %   filter.
     properties
-        % Types: stationary, timevariant, timeinvariant
+        % Types: stationary, timevarying, timeinvariant
         kalmanFilterType
+        % Domains: discrete, continuous-discrete
+        kalmanFilterDomain
         % Signals
         x1   % Prediction for one time step
         xf   % Estimate
@@ -32,16 +34,26 @@ classdef KalmanFilter < handle
         B    % Input matrix
         C    % Measurement matrix
         Cz   % Output matrix
-        obs  % Extended observability matrix
-        obsn % Noise propagation matrix
-        markov % Markov parameter matrix
-        % Length
+        Ac   % Continuous state matrix
+        Gc   % Continuous noise input matrix
+        Bc   % Continuous input matrix
+        % Lengths
         nx   % Number of states
-        nz   % Number of outputs
-        nu   % Number of inputs
-        j    % Length of horizon
+        % Independent variable
+        t    % Time
+        Ts   % Sampling time
     end
     methods
+        function DxP = process(kf,t,xP,u)
+            x = xP(1:kf.nx,:);
+            P = xP(kf.nx+1:end,:);
+            % State evolution
+            Dx = kf.Ac*x + kf.Bc*u;
+            % Covariance evolution
+            DP = kf.Ac*P + P*kf.Ac' + kf.Gc*kf.Gc';
+            % Derivative output
+            DxP = [Dx; DP];
+        end
         function measurementUpdate(kf,y)
             % Innovation covariance
             Re = kf.C*kf.P1*kf.C' + kf.R;
@@ -58,23 +70,46 @@ classdef KalmanFilter < handle
             kf.Pf = kf.P1 - kf.Kx*Re*kf.Kx';
             kf.Q = kf.Q - kf.Kw*Re*kf.Kw';
         end
-        function timeUpdate(kf,u)
-            % Signals
-            kf.x1 = kf.A*kf.xf + kf.B*u(:,1) + kf.G*kf.wf;
-            % Covariances
-            kf.P1 = kf.A*kf.Pf*kf.A' + kf.G*kf.Q*kf.G'...
-                - kf.A*kf.Kx*kf.S'*kf.G' - kf.G*kf.S*kf.Kx'*kf.A';
+        function timeUpdate(kf,u,t)
+            if strcmp(kf.kalmanFilterDomain,'discrete')
+                % State
+                kf.x1 = kf.A*kf.xf + kf.B*u(:,1) + kf.G*kf.wf;
+                % Covariance
+                kf.P1 = kf.A*kf.Pf*kf.A' + kf.G*kf.Q*kf.G'...
+                    - kf.A*kf.Kx*kf.S'*kf.G' - kf.G*kf.S*kf.Kx'*kf.A';
+            else
+                xP = [hx.xf; hx.Pf];
+                [t, xP] = ode15s(kf.process,[t t+kf.Ts],xP,kf.ODEoptions,u(:,1));
+                % State
+                kf.x1 = xP(end,1:kf.nx);
+                % Covariance
+                kf.P1 = xP(end,kf.nx+1:end);
+            end
         end
-        function statePrediction(kf,u,Q,j)
-            % Signals
-            kf.xj(:,1) = kf.A*kf.xf + kf.B*u(:,1);
-            % Covariances
-            kf.Pj{1} = kf.A*kf.Pf*kf.A' + kf.G*kf.Q*kf.G';
-            for it = 2:j
-                % Signals
-                kf.xj(:,it) = kf.A*kf.xj(:,it-1) + kf.B*u(:,it);
-                % Covariances
-                kf.Pj{it} = kf.A*kf.Pj{it-1}*kf.A' + kf.G*Q{it}*kf.G';
+        function statePrediction(kf,u,Q,j,t)
+            if strcmp(kf.kalmanFilterDomain,'discrete')
+                % State
+                kf.xj(:,1) = kf.A*kf.xf + kf.B*u(:,1);
+                % Covariance
+                kf.Pj{1} = kf.A*kf.Pf*kf.A' + kf.G*kf.Q*kf.G';
+                for it = 2:j
+                    % State
+                    kf.xj(:,it) = kf.A*kf.xj(:,it-1) + kf.B*u(:,it);
+                    % Covariance
+                    kf.Pj{it} = kf.A*kf.Pj{it-1}*kf.A' + kf.G*Q{it}*kf.G';
+                end
+            else
+                xP = [hx.xf; hx.Pf];
+                [t, xP] = ode15s(kf.process,[t t+kf.Ts],xP,kf.ODEoptions,u(:,1));
+                xPj(:,1) = xP(end,:)';
+                for it = 2:j
+                    [t, xP] = ode15s(kf.process,[t+(it-1)*kf.Ts t+it*kf.Ts],...
+                        xP,kf.ODEoptions,u(:,it));
+                    xPj(:,it) = xP(end,:)';
+                end
+                % Todo: give values to the states of the kalman filter.
+                %   Make it for extended, because this way it has no sense.
+                %   Also, resizing is NOT considered yet for the covariance
             end
         end
         function outputPrediction(kf,j)
@@ -95,17 +130,12 @@ classdef KalmanFilter < handle
             % Covariances
             kf.Ry = kf.C*kf.Pf*kf.C' + kf.R;
         end
-        function markovPrediction(kf,u)
-            u = reshape(u,kf.j*kf.nu,1);
-            % Signal
-            kf.z = kf.obs*kf.xf + kf.obsn*kf.wf + kf.markov*u;
-        end
         function [xf, x1, xj, z] = outputPredictor(kf,u,y,Q,j)
             kf.measurementUpdate(y);
+            kf.timeUpdate(u);
             if strcmp(kf.kalmanFilterType,'timevariant')
                 kf.timeVariation(kf,t);
             end
-            kf.timeUpdate(u);
             kf.statePrediction(u,Q,j);
             kf.outputPrediction(j);
             xf = kf.xf;
@@ -113,18 +143,11 @@ classdef KalmanFilter < handle
             xj = kf.xj;
             z = kf.z;
         end
-        function [xf, x1, z] = markovPredictor(kf,u,y)
-            kf.measurementUpdate(y);
-            kf.timeUpdate(u);
-            kf.markovPrediction(u);
-            xf = kf.xf;
-            x1 = kf.x1;
-            z = kf.z;
-        end
-        function timeVariation(kf,t)
+        function timeVariation(kf,t) % not ready!
             % Function for the case of changing system matrices. The
             %     methodology is not clarified yet.
             
+            % Furthermore, continuous version is not implemented yet
             kf.A = 0;
             kf.B = 0;
             kf.C = 0;
@@ -133,28 +156,29 @@ classdef KalmanFilter < handle
             kf.Q = 0;
             kf.S = 0;
         end
-        function initialize(kf,system,noise,initial,kalmanFilterType,horizon)
-            kf.kalmanFilterType = kalmanFilterType;
-            kf.A = system.A;
-            kf.B = system.B;
+        function initialize(kf,system,noise,initial,kalmanFilterSpecs)
+            kf.kalmanFilterType = kalmanFilterSpecs.kalmanFilterType;
+            kf.kalmanFilterDomain = kalmanFilterSpecs.kalmanFilterDomain;
+            if strcmp(kf.kalmanFilterDomain,'discrete')
+                kf.A = system.A;
+                kf.B = system.B;
+                kf.G = system.G;
+            else
+                kf.Ac = system.Ac;
+                kf.Bc = system.Bc;
+                kf.Gc = system.Gc;
+                kf.ODEoptions = kalmanFilterSpecs.ODEoptions;
+            end
             kf.C = system.C;
             kf.Cz = system.Cz;
-            kf.G = system.G;
             kf.R = noise.R;
             kf.Q = noise.Q;
             kf.S = noise.S;
             kf.x1 = initial.x;
             kf.P1 = initial.P;
-            % Length of vectors
-            kf.nu = size(kf.B,2);
-            kf.nx = length(kf.A);
-            kf.nz = size(kf.Cz,1);
-            kf.j = horizon;
+            kf.nx = length(kf.x1);
             if strcmp(kf.kalmanFilterType,'stationary')
                 kf.stationaryInitialization();
-            end
-            if nargin>4 % horizon is preset
-                kf.markovInitialization();
             end
         end
         function stationaryInitialization(kf)
@@ -162,24 +186,6 @@ classdef KalmanFilter < handle
             Res = kf.C*kf.P1s*kf.C' + kf.R;
             kf.Kx = kf.P1s*kf.C'/Res;
             kf.Kw = kf.S/Res;
-        end
-        function markovInitialization(kf)
-            obs = zeros(kf.nz*(kf.j+1),kf.nx);
-            kf.markov = zeros(kf.nz*kf.j,kf.nu*kf.j);
-            obs(1:kf.nz,:) = kf.Cz;
-            for it = 1:kf.j
-                % Extended observability matrix
-                obs(it*kf.nz+1:(it+1)*kf.nz,:) =...
-                    obs((it-1)*kf.nz+1:it*kf.nz,:)*kf.A;
-            end
-            H = obs(kf.nz+1:end,:)*kf.B;
-            for it = 1:kf.j
-                % Markov parameter matrix
-                kf.markov(end-it*kf.nz+1:end,...
-                    end-it*kf.nu+1:end-(it-1)*kf.nu) = H(1:it*kf.nz,:); 
-            end
-            kf.obsn = obs(1:kf.j*kf.nz,:)*kf.G;
-            kf.obs = obs(kf.nz+1:end,:);
         end
     end
 end
