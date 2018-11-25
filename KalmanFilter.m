@@ -160,8 +160,8 @@ classdef KalmanFilter < handle
         function stationaryInitialization(kf)
             kf.P1s = dare(kf.A',kf.C',kf.G*kf.Q*kf.G',kf.R,kf.G*kf.S);
             Res = kf.C*kf.P1s*kf.C' + kf.R;
-            kf.Kx = kf.P1s*kf.C'/Res;
-            kf.Kw = kf.S/Res;
+            kf.Kx = kf.P1s*kf.C'/Res; % TODO
+            kf.Kw = kf.S/Res; % TODO
         end
         function markovInitialization(kf)
             obs = zeros(kf.nz*(kf.j+1),kf.nx);

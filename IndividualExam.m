@@ -1,3 +1,4 @@
+clearvars
 %% Exercise 1
 % System parameters
 K = 1;
@@ -9,14 +10,14 @@ Kw = 0.1;
 tauw = 10;
 sigmav = 0.1;
 
-G = K*tf([beta 1],[tau1*tau2 tau1+tau2 1]); % TODO for the delay
-H = Kw*tf(1,[tauw 1]);
+Gtf = K*tf([beta 1],[tau1*tau2 tau1+tau2 1]); % TODO for the delay
+Htf = Kw*tf(1,[tauw 1]);
 
 %% Exercise 2
 
 Ts = 2;
-sscu = ss(G);
-sscw = ss(H);
+sscu = ss(Gtf);
+sscw = ss(Htf);
 Ac = [sscu.A zeros(2,1); zeros(1,2) sscw.A];
 Bc = [sscu.B; 0];
 Gc = [zeros(2,1); sscw.B];
@@ -26,6 +27,9 @@ Czc = [sscu.C sscw.C];
 Cz = Czc;
 C = Cz;
 % Covariance matrices TODO
+Rww = c2d_noise(A,G,Ts);
+Rvv = sigmav^2;
+Rwv = 0;
 
 %% Exercise 3
 
@@ -34,10 +38,9 @@ system.B = B;
 system.C = C;
 system.Cz = Cz;
 system.G = G;
-% TODO
-% noise.R = 0.1*eye(2);
-% noise.Q = 0.01*eye(1);
-% noise.S = 0.1*ones(1,2);
+noise.R = Rvv;
+noise.Q = 1;
+noise.S = Rwv;
 initial.x = zeros(3,1);
 initial.P = eye(3);
 kfType = 'stationary';
@@ -50,8 +53,8 @@ kf.Kw
 % Small simulation for showing how to compute x
 j = horizon;
 u = ones(1,j);
-Lr = chol(noise.R);% TODO: the noise variance
-y = initial.x + Lr*randn(2,1); 
+Lr = chol(noise.R);
+y = C*initial.x + Lr'*randn(1,1); 
 Q = cell(5,1);
 for it = 1:j
     Q{it} = noise.Q;
