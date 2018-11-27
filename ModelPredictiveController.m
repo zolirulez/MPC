@@ -12,109 +12,141 @@ classdef ModelPredictiveController < handle
         Wz
         Wu
         WDu
-        % Intermediate gradients
-        Mz
-        Mu
-        MDu
-        % Intermediate gradients
-        gs
-        gt
         % Final quadratic properties
-        H
-        g
-        rho
+        M       % Slope coefficient
+        H       % Hessian
+        g       % Gradient
         % Constraints
-        A
-        bl
-        bu
-        l
-        u
-        % DC control signal
-        Uc
+        A       % Constraint matrix
+        bl      % Lower function bound
+        bu      % Upper function bound
+        l       % Lower independent bound
+        u       % Upper independent bound
         % Memory
-        U_1
+        U_1     % Previous value of u
         % Length
-        nx   % Number of states
-        nz   % Number of outputs
-        nu   % Number of inputs
-        j    % Length of horizon
+        nx      % Number of states
+        nz      % Number of outputs
+        nu      % Number of inputs
+        j       % Length of horizon
+        no      % Number of unconstrained objectives
+        nscu    % Number of soft upper output constraints
+        nscl    % Number of soft lower output constraints
     end
     methods
-        function controlPrepare(mpc,b,R,refBounds,inputBounds,u_1)
-            Umin = inputBounds.Umin;
-            Umax = inputBounds.Umax;
-            DUmin = inputBounds.DUmin;
-            DUmax = inputBounds.DUmax;
-            Rmin = refBounds.Rmin;
-            Rmax = refBounds.Rmax;
-            % Inputs from predictor
-            c = R-b;
-            % Intermediate gradients
-            g1 = mpc.Mz*c + mpc.Mu*mpc.Uc + mpc.MDu*u_1;
-            mpc.g = [g1; mpc.gs; mpc.gt];
-            % Intermediate constants
-            rhoz = 0.5*(mpc.Wz*c)'*(mpc.Wz*c);
-            rhou = 0.5*(mpc.Wu*mpc.Uc)'*(mpc.Wu*mpc.Uc);
-            rhoDu = 0.5*(mpc.WDu*mpc.I0*u_1)'*(mpc.WDu*mpc.I0*u_1);
-            mpc.rho = rhoz + rhou + rhoDu;
+        function controlPrepare(mpc,c,ExtraFeatures,u_1)
+            % Gradients
+            for it = 1:mpc.no
+                mpc.g(1+(it-1)*mpc.j:it*mpc.j) = mpc.M{it}*c{it};
+            end
             % Constraints
-            mpc.l = [Umin; zeros(mpc.nz*mpc.j,1); zeros(mpc.nz*mpc.j,1)];
-            mpc.u = [Umax; Inf*ones(mpc.nz*mpc.j,1); 1e10*ones(mpc.nz*mpc.j,1)];
-            mpc.bl = [DUmin+mpc.I0*u_1; Rmin-b; -1e10*ones(mpc.nz*mpc.j,1)];
-            mpc.bu = [DUmax+mpc.I0*u_1; 1e10*ones(mpc.nu*mpc.j,1); Rmax-b];
+            mpc.bl = [];
+            mpc.bu = [];
+            if mpc.useInputConstraints
+                mpc.l(1:mpc.j*mpc.nu,1) = ExtraFeatures.Bounds.Umin;
+                mpc.u(1:mpc.j*mpc.nu,1) = ExtraFeatures.Bounds.Umax;
+            end
+            if mpc.useInputRateConstraints
+                mpc.bl = ExtraFeatures.Bounds.DUmin + mpc.I0*u_1;
+                mpc.bu = ExtraFeatures.Bounds.DUmax + mpc.I0*u_1;
+            end
+            if mpc.useSoftOutputConstraints
+                for it = 1:mpc.n.nscl
+                    mpc.bl = [mpc.bl; ExtraFeatures.Bounds.Rmin{it}-ExtraFeatures.b];
+                    mpc.bu = [mpc.bu; 1e12*ones(mpc.j*mpc.nz,1)];
+                end
+                for it = 1:mpc.n.nscu
+                    mpc.bl = [mpc.bu; -1e12*ones(mpc.j*mpc.nz,1)];
+                    mpc.bu = [mpc.bl; ExtraFeatures.Bounds.Rmax{it}-ExtraFeatures.b];
+                end
+            end
         end
-        function U = controlCompute(mpc,b,R,refBounds,inputBounds,u_1,optioptions)
-            mpc.controlPrepare(b,R,refBounds,inputBounds,u_1)
+        function U = controlCompute(mpc,c,ExtraFeatures,optioptions)
+            mpc.controlPrepare(c,ExtraFeatures)
             U = quadprog(mpc.H,mpc.g',[mpc.A; -mpc.A],[mpc.bu -mpc.bl],...
                 [],[],mpc.l,mpc.u,mpc.U_1,optioptions);
             mpc.U_1 = U;
         end
-        function initialize(mpc,W,Gamma,Uc,horizon,n)
+        function initialize(mpc,W,Ucoeff,horizon,n,ExtraFeatures,U_1)
+            % Function help: initialization of MPC.
+            %   Optimization problem is phrased as ||W(Ucoeff*U-c)||_2^2
+            %   Soft optimization subproblem minimizes nonnegative
+            %       excessions of output constraints
+            %   ExtraFeatures include the Markov matrix for soft output
+            %       constraints (if used), and booleans stating what kind
+            %       of constraints are to be considered.
+            %   Parameter U_1 is the previous value of u.
+            
+            % Previous value
+            mpc.U_1 = U_1;
+            % Descriptive numbers
             mpc.j = horizon;
             mpc.nu = n.nu;
             mpc.nx = n.nx;
             mpc.nz = n.nz;
-            % DC control signal
-            mpc.Uc = Uc;
-            mpc.U_1 = Uc;
-            % Markov matrix
-            mpc.Gamma = Gamma;
-            % Auxuliary matrices
-            mpc.I0 = [eye(mpc.nu); zeros(mpc.nu*(mpc.j-1),mpc.nu)];
+            mpc.no = n.no;
+            mpc.nscu = n.nscu;
+            mpc.nscl = n.nscl;
+            % Extra features
+            mpc.useInputConstraints = ExtraFeatures.useInputConstraints;
+            mpc.useInputRateConstraints = ExtraFeatures.useInputRateConstraints;
+            mpc.useSoftOutputConstraints = ExtraFeatures.useSoftOutputConstraints;
+            % Coefficient of independent variable in objective function
+            mpc.Ucoeff = Ucoeff;
+            % Initialization of matrices
             IN = eye(mpc.j);
-            mpc.Lambda = kron(IN,eye(mpc.nu))-...
-                [zeros(mpc.nu,mpc.nu*mpc.j);...
-                [kron(eye(mpc.j-1),eye(mpc.nu))...
-                zeros(mpc.nu*(horizon-1),mpc.nu)]];
-            % Weights
-            mpc.Wz = kron(IN,W.Wz);
-            mpc.Wu = kron(IN,W.Wu);
-            mpc.WDu = kron(IN,W.WDu);
-            Ws1 = kron(IN,W.Ws1);
-            Ws2 = kron(IN,W.Ws2);
-            Wt1 = kron(IN,W.Wt1);
-            Wt2 = kron(IN,W.Wt2);
-            % Intermediate Hessians
-            Hz = (mpc.Wz*mpc.Gamma)'*(mpc.Wz*mpc.Gamma);
-            Hu = mpc.Wu'*mpc.Wu;
-            HDu = (mpc.WDu*mpc.Lambda)'*(mpc.WDu*mpc.Lambda);
-            % Intermediate gradients
-            mpc.Mz = -(mpc.Wz*mpc.Gamma)'*mpc.Wz;
-            mpc.Mu = -Hu;
-            mpc.MDu = -(mpc.WDu*mpc.Lambda)'*mpc.WDu*mpc.I0;
-            % Intermediate Hessians
-            H1 = Hz + Hu + HDu;
-            Hs = Ws2'*Ws2;
-            Ht = Wt2'*Wt2;
-            % Intermediate gradients
-            mpc.gs = Ws1*ones(mpc.j*mpc.nu,1); 
-            mpc.gt = Wt1*ones(mpc.j*mpc.nu,1);
-            % Final Hessian
-            mpc.H = blkdiag(H1,Hs,Ht);
+            mpc.W = cell(mpc.no+(mpc.nscl+n.nscu));
+            mpc.H = zeros(mpc.j*mpc.nu);
+            mpc.M = cell(mpc.no+(mpc.nscl+n.nscu));
+            mpc.g = zeros(mpc.j*(1+(mpc.nscl+n.nscu)),1);
+            % Unconstrained objectives
+            for it = 1:mpc.no
+                % Weights
+                mpc.W{it} = kron(IN,W{it});
+                % Hessian
+                mpc.H = mpc.H +...
+                    (mpc.W{it}*mpc.Ucoeff{it})'*(mpc.W{it}*mpc.Ucoeff{it});
+                % Gradient coefficients
+                mpc.M{it} = -(mpc.W{it}*mpc.Ucoeff{it})'*mpc.W{it};
+            end
+            % Soft output constrained optimization
+            if mpc.useSoftOutputConstraints
+                mpc.e = ones(mpc.j*mpc.nu,1);
+                for it = mpc.no+1:mpc.no+(mpc.nscl+n.nscu)
+                    % Weights
+                    mpc.W{it} = kron(IN,W{it});
+                    % Hessian
+                    mpc.H = blkdiag(mpc.H,mpc.W{it}'*mpc.W{it});
+                    % Gradient coefficients
+                    mpc.M{it} = mpc.W{it};
+                    % Gradients
+                    mpc.g(mpc.no*mpc.j+1+(it-1)*mpc.j:mpc.no*mpc.j+it*mpc.j)...
+                        = mpc.M{it}*mpc.e;
+                end
+            end
             % Constraints
-            mpc.A = [mpc.Lambda zeros(mpc.nu*mpc.j) zeros(mpc.nu*mpc.j);...
-                mpc.Gamma eye(mpc.nu*mpc.j) zeros(mpc.nu*mpc.j);...
-                mpc.Gamma zeros(mpc.nu*mpc.j) -eye(mpc.nu*mpc.j)];
+            mpc.A = [];
+            mpc.l = zeros(mpc.j*(mpc.useInputConstraints*mpc.nu+...
+                mpc.nz*(mpc.nscl+n.nscu)));
+            mpc.u = mpc.l;
+            if mpc.useInputRateConstraints
+                mpc.I0 = [eye(mpc.nu); zeros(mpc.nu*(mpc.j-1),mpc.nu)];
+                mpc.Lambda = kron(IN,eye(mpc.nu))-...
+                    [zeros(mpc.nu,mpc.nu*mpc.j);...
+                    [kron(eye(mpc.j-1),eye(mpc.nu))...
+                    zeros(mpc.nu*(mpc.j-1),mpc.nu)]];
+                mpc.A = mpc.Lambda;
+            end
+            if mpc.useSoftOutputConstraints
+                mpc.Markov = ExtraFeatures.Markov;
+                mpc.A = [mpc.A zeros(length(mpc.A),mpc.j*mpc.nz*(mpc.nscl+n.nscu));...
+                    kron(ones(mpc.j*(mpc.nscl+n.nscu),1),mpc.Markov)...
+                    blkdiag(eye(mpc.j*mpc.nz*mpc.nscl),-eye(mpc.j*mpc.nz*mpc.nscu))];
+                mpc.l(mpc.j*mpc.nu+1:...
+                    mpc.j*(mpc.nu+mpc.nz*(mpc.nscl+n.nscu)),1) = 0;
+                mpc.u(mpc.j*mpc.nu+1:...
+                    mpc.j*(mpc.nu+mpc.nz*(mpc.nscl+n.nscu)),1) = 1e12; % Inf
+            end
         end
     end
 end
