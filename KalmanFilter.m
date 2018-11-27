@@ -172,7 +172,7 @@ classdef KalmanFilter < handle
                 obs(it*kf.nz+1:(it+1)*kf.nz,:) =...
                     obs((it-1)*kf.nz+1:it*kf.nz,:)*kf.A;
             end
-            H = obs(kf.nz+1:end,:)*kf.B;
+            H = obs(1:kf.j*kf.nz,:)*kf.B;
             for it = 1:kf.j
                 % Markov parameter matrix
                 kf.markov(end-it*kf.nz+1:end,...
