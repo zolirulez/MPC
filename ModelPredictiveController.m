@@ -1,19 +1,19 @@
 classdef ModelPredictiveController < handle
-    % Model Predictive Controller. Handles constrains on input, input
-    %   rate, output (for the latter soft constrains as well). The current
-    %   version is not prepared for a time varying system.
+    % Model Predictive Controller.
     properties
-        % Markov matrix
-        Gamma 
+        % Usage mode
+        useInputConstraints
+        useInputRateConstraints
+        useSoftOutputConstraints
         % Auxuliary matrices
-        I0
-        Lambda
-        % Weights
-        Wz
-        Wu
-        WDu
-        % Final quadratic properties
-        M       % Slope coefficient
+        Markov  % Markov matrix
+        IN      % Kronecker matrix
+        I0      % Picking 0th matrix
+        Lambda  % Differentiation matrix
+        % Quadratic properties
+        Ucoeff  % Coefficients of the input in optimization problem
+        W       % Cell of weights
+        M       % Cell of slope coefficients
         H       % Hessian
         g       % Gradient
         % Constraints
@@ -24,20 +24,22 @@ classdef ModelPredictiveController < handle
         u       % Upper independent bound
         % Memory
         U_1     % Previous value of u
-        % Length
+        % Lengths
+        j       % Length of horizon
         nx      % Number of states
         nz      % Number of outputs
         nu      % Number of inputs
-        j       % Length of horizon
         no      % Number of unconstrained objectives
         nscu    % Number of soft upper output constraints
         nscl    % Number of soft lower output constraints
     end
     methods
-        function controlPrepare(mpc,c,ExtraFeatures,u_1)
+        function controlPrepare(mpc,c,ExtraFeatures)
             % Gradients
+            mpc.g(1:mpc.j*mpc.nu) = 0;
             for it = 1:mpc.no
-                mpc.g(1+(it-1)*mpc.j:it*mpc.j) = mpc.M{it}*c{it};
+                mpc.g(1:mpc.j*mpc.nu) = mpc.g(1:mpc.j*mpc.nu) + ...
+                    mpc.M{it}*c{it};
             end
             % Constraints
             mpc.bl = [];
@@ -47,8 +49,8 @@ classdef ModelPredictiveController < handle
                 mpc.u(1:mpc.j*mpc.nu,1) = ExtraFeatures.Bounds.Umax;
             end
             if mpc.useInputRateConstraints
-                mpc.bl = ExtraFeatures.Bounds.DUmin + mpc.I0*u_1;
-                mpc.bu = ExtraFeatures.Bounds.DUmax + mpc.I0*u_1;
+                mpc.bl = ExtraFeatures.Bounds.DUmin + mpc.I0*mpc.U_1;
+                mpc.bu = ExtraFeatures.Bounds.DUmax + mpc.I0*mpc.U_1;
             end
             if mpc.useSoftOutputConstraints
                 for it = 1:mpc.n.nscl
@@ -63,11 +65,16 @@ classdef ModelPredictiveController < handle
         end
         function U = controlCompute(mpc,c,ExtraFeatures,optioptions)
             mpc.controlPrepare(c,ExtraFeatures)
-            U = quadprog(mpc.H,mpc.g',[mpc.A; -mpc.A],[mpc.bu -mpc.bl],...
-                [],[],mpc.l,mpc.u,mpc.U_1,optioptions);
+            if mpc.useInputConstraints || mpc.useInputRateConstraints ||...
+                    mpc.useSoftOutputConstraints
+                U = quadprog(mpc.H,mpc.g',[mpc.A; -mpc.A],[mpc.bu -mpc.bl],...
+                    [],[],mpc.l,mpc.u,mpc.U_1,optioptions);
+            else
+                U = -mpc.H\mpc.g;
+            end
             mpc.U_1 = U;
         end
-        function initialize(mpc,W,Ucoeff,horizon,n,ExtraFeatures,U_1)
+        function initialize(mpc,W,Ucoeff,ExtraFeatures,U_1)
             % Function help: initialization of MPC.
             %   Optimization problem is phrased as ||W(Ucoeff*U-c)||_2^2
             %   Soft optimization subproblem minimizes nonnegative
@@ -79,14 +86,6 @@ classdef ModelPredictiveController < handle
             
             % Previous value
             mpc.U_1 = U_1;
-            % Descriptive numbers
-            mpc.j = horizon;
-            mpc.nu = n.nu;
-            mpc.nx = n.nx;
-            mpc.nz = n.nz;
-            mpc.no = n.no;
-            mpc.nscu = n.nscu;
-            mpc.nscl = n.nscl;
             % Extra features
             mpc.useInputConstraints = ExtraFeatures.useInputConstraints;
             mpc.useInputRateConstraints = ExtraFeatures.useInputRateConstraints;
@@ -94,15 +93,14 @@ classdef ModelPredictiveController < handle
             % Coefficient of independent variable in objective function
             mpc.Ucoeff = Ucoeff;
             % Initialization of matrices
-            IN = eye(mpc.j);
-            mpc.W = cell(mpc.no+(mpc.nscl+n.nscu));
+            mpc.W = cell(mpc.no+(mpc.nscl+mpc.nscu),1);
             mpc.H = zeros(mpc.j*mpc.nu);
-            mpc.M = cell(mpc.no+(mpc.nscl+n.nscu));
-            mpc.g = zeros(mpc.j*(1+(mpc.nscl+n.nscu)),1);
+            mpc.M = cell(mpc.no+(mpc.nscl+mpc.nscu),1);
+            mpc.g = zeros(mpc.j*(1+(mpc.nscl+mpc.nscu)),1);
             % Unconstrained objectives
             for it = 1:mpc.no
                 % Weights
-                mpc.W{it} = kron(IN,W{it});
+                mpc.W{it} = kron(mpc.IN,W{it});
                 % Hessian
                 mpc.H = mpc.H +...
                     (mpc.W{it}*mpc.Ucoeff{it})'*(mpc.W{it}*mpc.Ucoeff{it});
@@ -112,9 +110,9 @@ classdef ModelPredictiveController < handle
             % Soft output constrained optimization
             if mpc.useSoftOutputConstraints
                 mpc.e = ones(mpc.j*mpc.nu,1);
-                for it = mpc.no+1:mpc.no+(mpc.nscl+n.nscu)
+                for it = mpc.no+1:mpc.no+(mpc.nscl+mpc.nscu)
                     % Weights
-                    mpc.W{it} = kron(IN,W{it});
+                    mpc.W{it} = kron(mpc.IN,W{it});
                     % Hessian
                     mpc.H = blkdiag(mpc.H,mpc.W{it}'*mpc.W{it});
                     % Gradient coefficients
@@ -127,26 +125,38 @@ classdef ModelPredictiveController < handle
             % Constraints
             mpc.A = [];
             mpc.l = zeros(mpc.j*(mpc.useInputConstraints*mpc.nu+...
-                mpc.nz*(mpc.nscl+n.nscu)));
+                mpc.nz*(mpc.nscl+mpc.nscu)),1);
             mpc.u = mpc.l;
             if mpc.useInputRateConstraints
-                mpc.I0 = [eye(mpc.nu); zeros(mpc.nu*(mpc.j-1),mpc.nu)];
-                mpc.Lambda = kron(IN,eye(mpc.nu))-...
-                    [zeros(mpc.nu,mpc.nu*mpc.j);...
-                    [kron(eye(mpc.j-1),eye(mpc.nu))...
-                    zeros(mpc.nu*(mpc.j-1),mpc.nu)]];
                 mpc.A = mpc.Lambda;
             end
             if mpc.useSoftOutputConstraints
                 mpc.Markov = ExtraFeatures.Markov;
-                mpc.A = [mpc.A zeros(length(mpc.A),mpc.j*mpc.nz*(mpc.nscl+n.nscu));...
-                    kron(ones(mpc.j*(mpc.nscl+n.nscu),1),mpc.Markov)...
+                mpc.A = [mpc.A zeros(length(mpc.A),mpc.j*mpc.nz*(mpc.nscl+mpc.nscu));...
+                    kron(ones(mpc.j*(mpc.nscl+mpc.nscu),1),mpc.Markov)...
                     blkdiag(eye(mpc.j*mpc.nz*mpc.nscl),-eye(mpc.j*mpc.nz*mpc.nscu))];
                 mpc.l(mpc.j*mpc.nu+1:...
-                    mpc.j*(mpc.nu+mpc.nz*(mpc.nscl+n.nscu)),1) = 0;
+                    mpc.j*(mpc.nu+mpc.nz*(mpc.nscl+mpc.nscu)),1) = 0;
                 mpc.u(mpc.j*mpc.nu+1:...
-                    mpc.j*(mpc.nu+mpc.nz*(mpc.nscl+n.nscu)),1) = 1e12; % Inf
+                    mpc.j*(mpc.nu+mpc.nz*(mpc.nscl+mpc.nscu)),1) = 1e12; % Inf
             end
+        end
+        function preinitialize(mpc,horizon,n)
+            % Descriptive numbers
+            mpc.j = horizon;
+            mpc.nu = n.nu;
+            mpc.nx = n.nx;
+            mpc.nz = n.nz;
+            mpc.no = n.no;
+            mpc.nscu = n.nscu;
+            mpc.nscl = n.nscl;
+            % Auxuliary matrices
+            mpc.IN = eye(mpc.j);
+            mpc.I0 = [eye(mpc.nu); zeros(mpc.nu*(mpc.j-1),mpc.nu)];
+            mpc.Lambda = kron(mpc.IN,eye(mpc.nu))-...
+                [zeros(mpc.nu,mpc.nu*mpc.j);...
+                [kron(eye(mpc.j-1),eye(mpc.nu))...
+                zeros(mpc.nu*(mpc.j-1),mpc.nu)]];
         end
     end
 end

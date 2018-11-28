@@ -62,19 +62,45 @@ end
 [xf, x1, xj, z] = kf.outputPredictor(u,y,Q,j)
 
 %% Exercise 4
-% TODO: THE MARKOV PREDICTOR STILL DOES NOT WORK WELL
-kf.markov
+kf.Markov
 kf.obs
 kf.obsn
 [xf, xj, z] = kf.markovPredictor(u,y)
 
 %% Exercise 5: input constained MPC initialization
-% TODO: put the design here
 mpc = ModelPredictiveController;
-mpc.initialize(W,Gamma,Uc,horizon,n)
+% Preinitialization
+n.nx = 3;
+n.nu = 1;
+n.nz = 1;
+n.no = 2;
+n.nscl = 0;
+n.nscu = 0;
+mpc.preinitialize(horizon,n);
+% Initialization
+W = cell(2,1);
+Ucoeff = cell(2,1);
+ExtraFeatures.useInputConstraints = true;
+ExtraFeatures.useInputRateConstraints = true;
+ExtraFeatures.useSoftOutputConstraints = false;
+W{1} = 10;
+W{2} = 1;
+Ucoeff{1} = kf.Markov;
+Ucoeff{2} = mpc.Lambda;
+U_1 = 0;
+mpc.initialize(W,Ucoeff,ExtraFeatures,U_1)
 %% Exercise 6: compute time steps
-% TODO: put the design here
+c = cell(2,1);
+b = kf.obs*kf.xf;
+Z = kron(ones(10,1),mean(reshape(kf.z,1,10),2));
+c{1} = Z-b;
+c{2} = mpc.I0*mpc.U_1;
+ExtraFeatures.Bounds.Umin = -100*ones(10,1);
+ExtraFeatures.Bounds.Umax = 100*ones(10,1);
+ExtraFeatures.Bounds.DUmin = -100*ones(10,1); 
+ExtraFeatures.Bounds.DUmax = 100*ones(10,1);
+ExtraFeatures.b = kf.obs;
 optioptions.Algorithm = 'interior-point-convex';
-U = mpc.controlCompute(b,R,refBounds,inputBounds,u_1,optioptions)
+U = mpc.controlCompute(c,ExtraFeatures,optioptions)
 %% Exercise 7: closed loop simulation of MPC
 % TODO

@@ -34,7 +34,7 @@ classdef KalmanFilter < handle
         Cz   % Output matrix
         obs  % Extended observability matrix
         obsn % Noise propagation matrix
-        markov % Markov parameter matrix
+        Markov % Markov parameter matrix
         % Length
         nx   % Number of states
         nz   % Number of outputs
@@ -98,7 +98,7 @@ classdef KalmanFilter < handle
         function markovPrediction(kf,u)
             u = reshape(u,kf.j*kf.nu,1);
             % Signal
-            kf.z = kf.obs*kf.xf + kf.obsn*kf.wf + kf.markov*u;
+            kf.z = kf.obs*kf.xf + kf.obsn*kf.wf + kf.Markov*u;
         end
         function [xf, x1, xj, z] = outputPredictor(kf,u,y,Q,j)
             kf.measurementUpdate(y);
@@ -154,7 +154,7 @@ classdef KalmanFilter < handle
                 kf.stationaryInitialization();
             end
             if nargin>4 % horizon is preset
-                kf.markovInitialization();
+                kf.MarkovInitialization();
             end
         end
         function stationaryInitialization(kf)
@@ -163,19 +163,19 @@ classdef KalmanFilter < handle
             kf.Kx = kf.P1s*kf.C'/Res; % TODO
             kf.Kw = kf.S/Res; % TODO
         end
-        function markovInitialization(kf)
+        function MarkovInitialization(kf)
             obs = zeros(kf.nz*(kf.j+1),kf.nx);
-            kf.markov = zeros(kf.nz*kf.j,kf.nu*kf.j);
+            kf.Markov = zeros(kf.nz*kf.j,kf.nu*kf.j);
             obs(1:kf.nz,:) = kf.Cz;
             for it = 1:kf.j
                 % Extended observability matrix
                 obs(it*kf.nz+1:(it+1)*kf.nz,:) =...
                     obs((it-1)*kf.nz+1:it*kf.nz,:)*kf.A;
             end
-            H = obs(kf.nz+1:end,:)*kf.B;
+            H = obs(1:kf.j*kf.nz,:)*kf.B;
             for it = 1:kf.j
                 % Markov parameter matrix
-                kf.markov(end-it*kf.nz+1:end,...
+                kf.Markov(end-it*kf.nz+1:end,...
                     end-it*kf.nu+1:end-(it-1)*kf.nu) = H(1:it*kf.nz,:); 
             end
             kf.obsn = obs(1:kf.j*kf.nz,:)*kf.G;
