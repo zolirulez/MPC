@@ -13,7 +13,7 @@ classdef KalmanFilter < handle
         xj   % Predictions for j time steps
         wf   % Estimate of process noise
         y    % Measurement
-        z    % Output
+        zj   % Output
         % Covariance and filtering matrices
         R    % Covariance of measurement noise
         Q    % Covariance of process noise
@@ -79,12 +79,12 @@ classdef KalmanFilter < handle
         end
         function outputPrediction(kf,j)
             % Signals
-            kf.z(:,1) = kf.Cz*kf.xj(:,1);
+            kf.zj(:,1) = kf.Cz*kf.xj(:,1);
             % Covariances
             kf.Rz{1} = kf.Cz*kf.Pj{1}*kf.Cz';
             for it = 2:j
                 % Signals
-                kf.z(:,it) = kf.Cz*kf.xj(:,it);
+                kf.zj(:,it) = kf.Cz*kf.xj(:,it);
                 % Covariances
                 kf.Rz{it} = kf.Cz*kf.Pj{it}*kf.Cz';
             end
@@ -98,9 +98,9 @@ classdef KalmanFilter < handle
         function markovPrediction(kf,u)
             u = reshape(u,kf.j*kf.nu,1);
             % Signal
-            kf.z = kf.obs*kf.xf + kf.obsn*kf.wf + kf.Markov*u;
+            kf.zj = kf.obs*kf.xf + kf.obsn*kf.wf + kf.Markov*u;
         end
-        function [xf, x1, xj, z] = outputPredictor(kf,u,y,Q,j)
+        function [xf, x1, xj, zj] = outputPredictor(kf,u,y,Q,j)
             kf.measurementUpdate(y);
             if strcmp(kf.kalmanFilterType,'timevariant')
                 kf.timeVariation(kf,t);
@@ -111,15 +111,16 @@ classdef KalmanFilter < handle
             xf = kf.xf;
             x1 = kf.x1;
             xj = kf.xj;
-            z = kf.z;
+            zj = kf.zj;
         end
-        function [xf, x1, z] = markovPredictor(kf,u,y)
+        function [xf, x1, zj] = markovPredictor(kf,U,y)
+            u = U(1:kf.nu,1);
             kf.measurementUpdate(y);
             kf.timeUpdate(u);
-            kf.markovPrediction(u);
+            kf.markovPrediction(U);
             xf = kf.xf;
             x1 = kf.x1;
-            z = kf.z;
+            zj = kf.zj;
         end
         function timeVariation(kf,t)
             % Function for the case of changing system matrices. The

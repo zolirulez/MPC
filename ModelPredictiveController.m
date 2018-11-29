@@ -23,7 +23,7 @@ classdef ModelPredictiveController < handle
         l       % Lower independent bound
         u       % Upper independent bound
         % Memory
-        U_1     % Previous value of u
+        u_1     % Previous value of u
         % Lengths
         j       % Length of horizon
         nx      % Number of states
@@ -49,8 +49,8 @@ classdef ModelPredictiveController < handle
                 mpc.u(1:mpc.j*mpc.nu,1) = ExtraFeatures.Bounds.Umax;
             end
             if mpc.useInputRateConstraints
-                mpc.bl = ExtraFeatures.Bounds.DUmin + mpc.I0*mpc.U_1;
-                mpc.bu = ExtraFeatures.Bounds.DUmax + mpc.I0*mpc.U_1;
+                mpc.bl = ExtraFeatures.Bounds.DUmin + mpc.I0*mpc.u_1;
+                mpc.bu = ExtraFeatures.Bounds.DUmax + mpc.I0*mpc.u_1;
             end
             if mpc.useSoftOutputConstraints
                 for it = 1:mpc.n.nscl
@@ -63,18 +63,19 @@ classdef ModelPredictiveController < handle
                 end
             end
         end
-        function U = controlCompute(mpc,c,ExtraFeatures,optioptions)
+        function [u, U] = controlCompute(mpc,c,ExtraFeatures,optioptions)
             mpc.controlPrepare(c,ExtraFeatures)
             if mpc.useInputConstraints || mpc.useInputRateConstraints ||...
                     mpc.useSoftOutputConstraints
                 U = quadprog(mpc.H,mpc.g',[mpc.A; -mpc.A],[mpc.bu -mpc.bl],...
-                    [],[],mpc.l,mpc.u,mpc.U_1,optioptions);
+                    [],[],mpc.l,mpc.u,mpc.u_1,optioptions);
             else
                 U = -mpc.H\mpc.g;
             end
-            mpc.U_1 = U;
+            u = U(1:mpc.nu,1);
+            mpc.u_1 = u;
         end
-        function initialize(mpc,W,Ucoeff,ExtraFeatures,U_1)
+        function initialize(mpc,W,Ucoeff,ExtraFeatures,u_1)
             % Function help: initialization of MPC.
             %   Optimization problem is phrased as ||W(Ucoeff*U-c)||_2^2
             %   Soft optimization subproblem minimizes nonnegative
@@ -82,10 +83,10 @@ classdef ModelPredictiveController < handle
             %   ExtraFeatures include the Markov matrix for soft output
             %       constraints (if used), and booleans stating what kind
             %       of constraints are to be considered.
-            %   Parameter U_1 is the previous value of u.
+            %   Parameter u_1 is the previous value of u.
             
             % Previous value
-            mpc.U_1 = U_1;
+            mpc.u_1 = u_1;
             % Extra features
             mpc.useInputConstraints = ExtraFeatures.useInputConstraints;
             mpc.useInputRateConstraints = ExtraFeatures.useInputRateConstraints;

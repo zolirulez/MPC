@@ -21,12 +21,11 @@ sscw = ss(Htf);
 Ac = [sscu.A zeros(2,1); zeros(1,2) sscw.A];
 Bc = [sscu.B; 0];
 Gc = [zeros(2,1); sscw.B];
-Cc = [sscu.C sscw.C];
-Czc = [sscu.C 0];
+Czc = [sscu.C sscw.C];
 [A,B] = c2d(Ac,Bc,Ts);
 [A,G] = c2d(Ac,Gc,Ts);
 Cz = Czc;
-C = Cc;
+C = Cz;
 % Covariance matrices TODO
 Rww = c2d_noise(A,G,Ts);
 Rvv = sigmav^2;
@@ -107,10 +106,9 @@ optioptions.Algorithm = 'interior-point-convex';
 x = zeros(3,1);
 Lq = chol(noise.Q); 
 itmax = Ts*100;
-record.t = 1:Ts:itmax;
-record.x = zeros(kf.nx,length(record.t));
-record.z = zeros(kf.nz,length(record.t));
-for it = 1:length(record.t)
+record.t = linspace(1,itmax,Ts);
+record.x = zeros(
+for it = 1:Ts:itmax
     % Kalman Filter, Markov predictor
     kf.markovPredictor(U,y);
     % Model Predictive Control
@@ -126,9 +124,4 @@ for it = 1:length(record.t)
     x = A*x + B*u + G*w;
     z = Cz*x;
     y = z + v;
-    % Saving results
-    record.x(1:kf.nx,it) = x;
-    record.z(1:kf.nz,it) = z;
 end
-figure(1)
-plot(record.t,record.x)
