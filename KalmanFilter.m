@@ -35,6 +35,7 @@ classdef KalmanFilter < handle
         obs  % Extended observability matrix
         obsn % Noise propagation matrix
         Markov % Markov parameter matrix
+        b    % Initial condition dependent term
         % Length
         nx   % Number of states
         nz   % Number of outputs
@@ -98,7 +99,8 @@ classdef KalmanFilter < handle
         function markovPrediction(kf,u)
             u = reshape(u,kf.j*kf.nu,1);
             % Signal
-            kf.zj = kf.obs*kf.xf + kf.obsn*kf.wf + kf.Markov*u;
+            kf.b = kf.obs*kf.xf + kf.obsn*kf.wf;
+            kf.zj = kf.b + kf.Markov*u;
         end
         function [xf, x1, xj, zj] = outputPredictor(kf,u,y,Q,j)
             kf.measurementUpdate(y);
@@ -165,22 +167,27 @@ classdef KalmanFilter < handle
             kf.Kw = kf.S/Res; % TODO
         end
         function MarkovInitialization(kf)
-            obs = zeros(kf.nz*(kf.j+1),kf.nx);
+            OBS = zeros(kf.nz*(kf.j+1),kf.nx);
             kf.Markov = zeros(kf.nz*kf.j,kf.nu*kf.j);
-            obs(1:kf.nz,:) = kf.Cz;
+            OBS(1:kf.nz,:) = kf.Cz;
             for it = 1:kf.j
                 % Extended observability matrix
-                obs(it*kf.nz+1:(it+1)*kf.nz,:) =...
-                    obs((it-1)*kf.nz+1:it*kf.nz,:)*kf.A;
+                OBS(it*kf.nz+1:(it+1)*kf.nz,:) =...
+                    OBS((it-1)*kf.nz+1:it*kf.nz,:)*kf.A;
             end
-            H = obs(1:kf.j*kf.nz,:)*kf.B;
+            H = OBS(1:kf.j*kf.nz,:)*kf.B;
             for it = 1:kf.j
                 % Markov parameter matrix
                 kf.Markov(end-it*kf.nz+1:end,...
                     end-it*kf.nu+1:end-(it-1)*kf.nu) = H(1:it*kf.nz,:); 
             end
-            kf.obsn = obs(1:kf.j*kf.nz,:)*kf.G;
-            kf.obs = obs(kf.nz+1:end,:);
+            kf.obsn = OBS(1:kf.j*kf.nz,:)*kf.G;
+            kf.obs = OBS(kf.nz+1:end,:);
+        end
+        function n = stateSpaceDimensions(kf)
+            n.nu = kf.nu;
+            n.nx = kf.nx;
+            n.nz = kf.nz;
         end
     end
 end

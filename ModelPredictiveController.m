@@ -123,6 +123,7 @@ classdef ModelPredictiveController < handle
                         = mpc.M{it}*mpc.e;
                 end
             end
+            % Come change
             % Constraints
             mpc.A = [];
             mpc.l = zeros(mpc.j*(mpc.useInputConstraints*mpc.nu+...
