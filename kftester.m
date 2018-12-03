@@ -21,7 +21,6 @@ Q = cell(5,1);
 for it = 1:j
     Q{it} = noise.Q;
 end
-% WARNING: THE MARKOV PREDICTOR STILL DOES NOT WORK WELL
 % [xf, x1, xj, z] = kf.outputPredictor(u,y,Q,j)
 [xf, x1, z] = kf.markovPredictor(u,y)
 % disp(['Final value should be ' num2str(kf.Cz*((eye(2)-kf.A)\kf.B))])
