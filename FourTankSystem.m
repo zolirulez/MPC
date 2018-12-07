@@ -27,8 +27,8 @@ classdef FourTankSystem < handle
             
             x = fts.m;
             [t, x] = ode15s(@fts.process,[t(1) t(2)],x,fts.ODEoptions,inputs);
-            fts.record.t = [fts.record.t; t];
-            fts.record.x = [fts.record.x; x];
+            fts.record.t = [fts.record.t; t(1:end-1,:)];
+            fts.record.x = [fts.record.x; x(1:end-1,:)];
             fts.m = x(end,:)';
         end
         function Dx = process(fts,t,x,F)
@@ -84,7 +84,7 @@ classdef FourTankSystem < handle
             System.A = [-1/T(1) 0 1/T(3) 0;0 -1/T(2) 0 1/T(4);0 0 -1/T(3) 0;0 0 0 -1/T(4)];
             System.B = [fts.rho*fts.gamma(1) 0;0 fts.rho*fts.gamma(2);...
                 0 fts.rho*(1-fts.gamma(2)); fts.rho*(1-fts.gamma(1)) 0];
-            System.C = 1/(fts.rho*fts.A)*eye(4);
+            System.C = 1/(fts.rho*fts.A)*eye(2,4);
             System.Cz = System.C(1:2,:);
             fts.ssc = System;
             % Transfer function

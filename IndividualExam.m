@@ -115,12 +115,11 @@ for it = 1:length(record.t)
     % Kalman Filter, Markov predictor
     kf.markovPredictor(U,y);
     % Model Predictive Control
-    b = kf.obs*kf.xf;
     Z = kron(ones(10,1),mean(reshape(kf.zj,1,10),2));
-    c{1} = Z-b;
+    c{1} = Z-kf.b;
     c{2} = mpc.I0*mpc.u_1;
     ExtraFeatures.b = kf.b;
-    [u U] = mpc.controlCompute(c,ExtraFeatures,optioptions);
+    [u, U] = mpc.controlCompute(c,ExtraFeatures,optioptions);
     % Physical system and measurement
     v = Lr'*randn(1,1);
     w = Lq'*randn(1,1);
