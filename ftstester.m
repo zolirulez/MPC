@@ -46,18 +46,22 @@ y = y(1,:)';
 pi = ParameterIdentifier;
 Model = @tf_function;
 PartialDerivatives = @tf_der;
+Output = @tf_out;
+OutputPartialDerivatives = @tf_outder;
 Bounds.LowerBound = [];
 Bounds.UpperBound = [];
 ODEoptions = [];
 OPToptions = optimoptions('lsqnonlin','Algorithm','levenberg-marquardt','Jacobian','on',...
     'SpecifyObjectiveGradient',true,'FunctionTolerance',1e-10,...
     'StepTolerance',1e-3);
-pi.initialize(Model,PartialDerivatives,Bounds,ODEoptions,OPToptions);
+pi.initialize(Model,PartialDerivatives,Output,OutputPartialDerivatives,...
+    Bounds,ODEoptions,OPToptions);
 
 % Identification
 ResidualArguments.t = fts.record.t;
 ResidualArguments.y = y;
-ResidualArguments.np = 3;
-ResidualArguments.x0 = 0;
-InitialParameters = [0.5; 0.5; 0.5];
+ResidualArguments.np = 4;
+ResidualArguments.nx = 2;
+ResidualArguments.x0 = [0; 0];
+InitialParameters = [0.5; 0.5; 0.5; 0.5];
 p = pi.identify(ResidualArguments,InitialParameters)
