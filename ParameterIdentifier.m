@@ -28,13 +28,15 @@ classdef ParameterIdentifier < handle
             % Implementation of integration
             [t,z] = ode45(@(t,z) pi.ModelAndSensitivity(t,z,Parameters,nx,np),t,z0,pi.ODEoptions);
             x = z(:,1:nx);
-            S = reshape(z(:,nx+1:end),m,nx*np);
+            S = reshape(z(:,nx+1:end),m*nx,np); % THIS RESHAPE TODO
             % Residual
-            yp = pi.g(x);
-            residual = yp-y;
-            % Jacobian TODO J = dgdx*Sp+dgdp
+            residual = pi.g(x,Parameters)-y;
+            % Jacobian 
+            jacobian = zeros(m,np);
             [Dg_Dx,Dg_Dp] = pi.Dg_Dxp(x,Parameters);
-            jacobian = reshape(Dg_Dx*S+Dg_Dp,m,np);%Wrong: there are 2 states, but S is nx*np=8 wide
+            for it = 1:m
+                jacobian(it,:) = reshape(Dg_Dx*S(1+(it-1)*nx:it*nx,:)+Dg_Dp,1,np);
+            end
         end
         function Dz = ModelAndSensitivity(pi,t,z,p,nx,np)
             x = z(1:nx,1);                          % Unpack states
