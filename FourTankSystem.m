@@ -1,4 +1,4 @@
-classdef FourTankSystem < handle
+classdef FourTankSystem < matlab.mixin.Copyable
     properties
         t
         ODEoptions
@@ -20,16 +20,21 @@ classdef FourTankSystem < handle
         ssd
         tfc
         tfd
+        Lrvv
+        Lrww
     end
     methods
         function timestep(fts,t,inputs)
             % Function help: 
             
+            inputs = inputs + fts.Lrww*randn(4,1);
             x = fts.m;
             [t, x] = ode15s(@fts.process,[t(1) t(2)],x,fts.ODEoptions,inputs);
             fts.record.t = [fts.record.t; t(1:end-1,:)];
             fts.record.x = [fts.record.x; x(1:end-1,:)];
             fts.m = x(end,:)';
+            fts.record.meas = [fts.record.meas;...
+                (fts.m/fts.A/fts.rho+fts.Lrvv*randn(4,1))'];
         end
         function Dx = process(fts,t,x,F)
             % Time
@@ -66,12 +71,36 @@ classdef FourTankSystem < handle
             % Initial values
             fts.m0 = initials.m;
             fts.m = fts.m0;
+            % Noise initialization to zero
+            fts.Lrww = zeros(4);
+            fts.Lrvv = zeros(4);
             % Solver options
             fts.ODEoptions = ODEoptions;
             % Records
             Record.t = [];
             Record.x = [];
+            Record.meas = [];
             fts.record = Record;
+        end
+        function addnoise(fts,noise)
+            % Function help:
+            
+            % DO WE NEED RHO FOR THE LINEAR SYSTEM?
+            % WHAT IS THE CONNECTION BETWEEN G AND LRWW?
+            % TODO
+            % Noise
+            fts.Lrvv = chol(noise.Rvv,'lower');
+            if any(noise.Rww)
+                fts.Lrww(3:4,3:4) = chol(noise.Rww(3:4,3:4),'lower');
+            end
+        end
+        function reinitialize(fts)
+            % Initialization of the equilibrium
+            fts.m = fts.ms;
+            % Initialization of the records
+            fts.record.t = [];
+            fts.record.x = [];
+            fts.record.meas = [];
         end
         function steadyState(fts,ssInput,initialGuess)
             fts.ms = fsolve(@fts.steadyStateProcess,initialGuess,[],ssInput);
@@ -86,6 +115,12 @@ classdef FourTankSystem < handle
                 0 fts.rho*(1-fts.gamma(2)); fts.rho*(1-fts.gamma(1)) 0];
             System.C = 1/(fts.rho*fts.A)*eye(2,4);
             System.Cz = System.C(1:2,:);
+            % Noise
+            if any(any(fts.Lrvv)) || any(any(fts.Lrww))
+                System.Rww = fts.Lrww*fts.Lrww';
+                System.Rvv = fts.Lrvv*fts.Lrvv';
+                System.Rwv = zeros(4);
+            end
             fts.ssc = System;
             % Transfer function
             fts.tfc = tf(ss(System.A,System.B,System.C,zeros(2,2)));
@@ -96,9 +131,21 @@ classdef FourTankSystem < handle
             [Ad,Bd] = c2d(System.A,System.B,System.Ts);
             System.A = Ad;
             System.B = Bd;
+            if any(any(fts.Lrvv)) || any(any(fts.Lrww))
+                System.Rww = c2d_noise(fts.A,fts.Lrww,Ts);
+                System.Rvv = fts.ssc.Rvv;
+                System.Rwv = zeros(4);
+            end
             fts.ssd = System;
             % Transfer Function
             fts.tfd = tf(ss(System.A,System.B,System.C,zeros(2,2),System.Ts));
+        end
+        function Qd = c2d_noise(fts,A,G,Ts)
+            [nx,~]=size(G);
+            M = [-A' G*G'; zeros(nx,nx) A];
+            Phi = expm(M*Ts);
+            Ad = Phi(nx+1:nx+nx,nx+1:nx+nx);
+            Qd = Ad'*Phi(1:nx,nx+1:nx+nx);
         end
     end
 end

@@ -27,7 +27,7 @@ Czc = [sscu.C 0];
 [A,G] = c2d(Ac,Gc,Ts);
 Cz = Czc;
 C = Cc;
-% Covariance matrices TODO
+% Covariance matrices
 Rww = c2d_noise(A,G,Ts);
 Rvv = sigmav^2;
 Rwv = 0;
@@ -115,7 +115,7 @@ for it = 1:length(record.t)
     % Kalman Filter, Markov predictor
     kf.markovPredictor(U,y);
     % Model Predictive Control
-    Z = kron(ones(10,1),mean(reshape(kf.zj,1,10),2));
+    Z = kron(ones(10,1),mean(reshape(kf.zj,1,10),2)); % TODO for R
     c{1} = Z-kf.b;
     c{2} = mpc.I0*mpc.u_1;
     ExtraFeatures.b = kf.b;
