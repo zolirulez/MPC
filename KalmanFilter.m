@@ -160,6 +160,11 @@ classdef KalmanFilter < handle
                 kf.MarkovInitialization();
             end
         end
+        function reinitialize(kf,initial,horizon)
+            kf.x1 = initial.x;
+            kf.P1 = initial.P;
+            kf.j = horizon;
+        end
         function stationaryInitialization(kf)
             kf.P1s = dare(kf.A',kf.C',kf.G*kf.Q*kf.G',kf.R,kf.G*kf.S);
             Res = kf.C*kf.P1s*kf.C' + kf.R;

@@ -90,7 +90,7 @@ classdef FourTankSystem < matlab.mixin.Copyable
             % TODO
             % Noise
             fts.Lrvv = chol(noise.Rvv,'lower');
-            if any(noise.Rww)
+            if any(any(noise.Rww))
                 fts.Lrww(3:4,3:4) = chol(noise.Rww(3:4,3:4),'lower');
             end
         end
@@ -109,11 +109,13 @@ classdef FourTankSystem < matlab.mixin.Copyable
             fts.m = fts.m0;
         end
         function linearize(fts)
-            T = (fts.A/fts.a)*sqrt(2*fts.hs/fts.g);
+            %T = (fts.A/fts.a)*sqrt(2*fts.hs/fts.g);
+            T = sqrt(fts.ms/(fts.rho*fts.g/fts.A/2))/fts.a;
             System.A = [-1/T(1) 0 1/T(3) 0;0 -1/T(2) 0 1/T(4);0 0 -1/T(3) 0;0 0 0 -1/T(4)];
             System.B = [fts.rho*fts.gamma(1) 0;0 fts.rho*fts.gamma(2);...
                 0 fts.rho*(1-fts.gamma(2)); fts.rho*(1-fts.gamma(1)) 0];
-            System.C = 1/(fts.rho*fts.A)*eye(2,4);
+            System.G = [0 0; 0 0; fts.rho 0; 0 fts.rho];
+            System.C = 1/(fts.rho*fts.A)*eye(4);
             System.Cz = System.C(1:2,:);
             % Noise
             if any(any(fts.Lrvv)) || any(any(fts.Lrww))
@@ -123,25 +125,24 @@ classdef FourTankSystem < matlab.mixin.Copyable
             end
             fts.ssc = System;
             % Transfer function
-            fts.tfc = tf(ss(System.A,System.B,System.C,zeros(2,2)));
+            fts.tfc = tf(ss(System.A,System.B,System.Cz,zeros(2,2)));
         end
         function discretize(fts,Ts)
             System = fts.ssc;
             System.Ts = Ts;
+            if any(any(fts.Lrvv)) || any(any(fts.Lrww))
+                System.Rww = fts.c2d_noise(System.A,System.G*fts.Lrww(3:4,3:4),System.Ts);
+                System.G = eye(4);
+            end
             [Ad,Bd] = c2d(System.A,System.B,System.Ts);
             System.A = Ad;
             System.B = Bd;
-            if any(any(fts.Lrvv)) || any(any(fts.Lrww))
-                System.Rww = c2d_noise(fts.A,fts.Lrww,Ts);
-                System.Rvv = fts.ssc.Rvv;
-                System.Rwv = zeros(4);
-            end
             fts.ssd = System;
             % Transfer Function
-            fts.tfd = tf(ss(System.A,System.B,System.C,zeros(2,2),System.Ts));
+            fts.tfd = tf(ss(System.A,System.B,System.Cz,zeros(2,2),System.Ts));
         end
         function Qd = c2d_noise(fts,A,G,Ts)
-            [nx,~]=size(G);
+            [nx,~] = size(G);
             M = [-A' G*G'; zeros(nx,nx) A];
             Phi = expm(M*Ts);
             Ad = Phi(nx+1:nx+nx,nx+1:nx+nx);
