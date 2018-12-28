@@ -45,7 +45,11 @@ classdef KalmanFilter < handle
     methods
         function measurementUpdate(kf,y)
             % Innovation covariance
-            Re = kf.C*kf.P1*kf.C' + kf.R;
+            try
+                Re = kf.C*kf.P1*kf.C' + kf.R;
+            catch
+                disp('something')
+            end
             % Kalman filter
             if ~strcmp(kf.kalmanFilterType,'stationary')
                 kf.Kx = kf.P1*kf.C'/Re;
