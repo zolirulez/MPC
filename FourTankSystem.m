@@ -137,6 +137,7 @@ classdef FourTankSystem < matlab.mixin.Copyable
             [Ad,Bd] = c2d(System.A,System.B,System.Ts);
             System.A = Ad;
             System.B = Bd;
+            System.G = eye(length(Ad));
             fts.ssd = System;
             % Transfer Function
             fts.tfd = tf(ss(System.A,System.B,System.Cz,zeros(2,2),System.Ts));
