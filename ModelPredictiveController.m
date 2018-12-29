@@ -1,4 +1,4 @@
-classdef ModelPredictiveController < handle
+classdef ModelPredictiveController < matlab.mixin.Copyable
     % Model Predictive Controller.
     properties
         % Usage mode
@@ -142,6 +142,8 @@ classdef ModelPredictiveController < handle
                 mpc.u(mpc.j*mpc.nu+1:...
                     mpc.j*(mpc.nu+mpc.nz*(mpc.nscl+mpc.nscu)),1) = 1e12; % Inf
             end
+            % Correcting nnumerical errors of the Hessian
+            mpc.H = (mpc.H+mpc.H')/2;
         end
         function preinitialize(mpc,horizon,n)
             % Descriptive numbers

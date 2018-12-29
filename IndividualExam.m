@@ -83,14 +83,14 @@ ExtraFeatures.useInputConstraints = true;
 ExtraFeatures.useInputRateConstraints = true;
 ExtraFeatures.useSoftOutputConstraints = false;
 W{1} = 10;
-W{2} = 1;
+W{2} = 5;
 Ucoeff{1} = kf.Markov;
 Ucoeff{2} = mpc.Lambda;
 u_1 = 0;
 mpc.initialize(W,Ucoeff,ExtraFeatures,u_1)
 %% Exercise 6: compute time steps
 c = cell(2,1);
-Z = kron(ones(10,1),mean(reshape(kf.zj,1,10),2));
+Z = ones(10,1);
 c{1} = Z - kf.b;
 c{2} = mpc.I0*mpc.u_1;
 ExtraFeatures.Bounds.Umin = -100*ones(10,1);
@@ -115,7 +115,7 @@ for it = 1:length(record.t)
     % Kalman Filter, Markov predictor
     kf.markovPredictor(U,y);
     % Model Predictive Control
-    Z = kron(ones(10,1),mean(reshape(kf.zj,1,10),2)); % TODO for R
+    Z = ones(10,1); % TODO for R
     c{1} = Z-kf.b;
     c{2} = mpc.I0*mpc.u_1;
     ExtraFeatures.b = kf.b;
