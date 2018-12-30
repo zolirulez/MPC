@@ -30,7 +30,7 @@ W.Ws1 = eye(2);
 W.Ws2 = eye(2);
 W.Wt1 = eye(2);
 W.Wt2 = eye(2);
-mpc = ModelPredictiveController;
+mpc = ModelPredictiveControllerLecture;
 mpc.initialize(W,Gamma,Uc,horizon,n)
 
 DUmin = [-1; -1];

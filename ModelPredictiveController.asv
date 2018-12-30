@@ -75,7 +75,7 @@ classdef ModelPredictiveController < matlab.mixin.Copyable
             else
                 U = -mpc.H\mpc.g;
             end
-            U = U(1:mpc.nu*mpc.j);
+            U = U(1:mpc.);
             u = U(1:mpc.nu,1);
             mpc.u_1 = u;
         end
