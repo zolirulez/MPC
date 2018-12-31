@@ -87,7 +87,8 @@ W{2} = 5;
 Ucoeff{1} = kf.Markov;
 Ucoeff{2} = mpc.Lambda;
 u_1 = 0;
-mpc.initialize(W,Ucoeff,ExtraFeatures,u_1)
+optioptions.Algorithm = 'interior-point-convex';
+mpc.initialize(W,Ucoeff,n,ExtraFeatures,u_1,optioptions)
 %% Exercise 6: compute time steps
 c = cell(2,1);
 Z = ones(10,1);
@@ -98,8 +99,7 @@ ExtraFeatures.Bounds.Umax = 100*ones(10,1);
 ExtraFeatures.Bounds.DUmin = -100*ones(10,1); 
 ExtraFeatures.Bounds.DUmax = 100*ones(10,1);
 ExtraFeatures.b = kf.b;
-optioptions.Algorithm = 'interior-point-convex';
-[u, U] = mpc.controlCompute(c,ExtraFeatures,optioptions)
+[u, U] = mpc.controlCompute(c,ExtraFeatures)
 %% Exercise 7: closed loop simulation of MPC
 x = zeros(3,1);
 Lq = chol(noise.Q); 
@@ -119,7 +119,7 @@ for it = 1:length(record.t)
     c{1} = Z-kf.b;
     c{2} = mpc.I0*mpc.u_1;
     ExtraFeatures.b = kf.b;
-    [u, U] = mpc.controlCompute(c,ExtraFeatures,optioptions);
+    [u, U] = mpc.controlCompute(c,ExtraFeatures);
     % Physical system and measurement
     v = Lr'*randn(1,1);
     w = Lq'*randn(1,1);

@@ -5,6 +5,8 @@ classdef ModelPredictiveController < matlab.mixin.Copyable
         useInputConstraints
         useInputRateConstraints
         useSoftOutputConstraints
+        % Optimization options
+        optioptions
         % Auxuliary matrices
         Markov  % Markov matrix
         IN      % Kronecker matrix
@@ -56,22 +58,22 @@ classdef ModelPredictiveController < matlab.mixin.Copyable
             if mpc.useSoftOutputConstraints
                 for it = 1:mpc.nscl
                     mpc.bl = [mpc.bl; ExtraFeatures.Bounds.Rmin{it}-ExtraFeatures.b];
-                    mpc.bu = [mpc.bu; 1e12*ones(mpc.j*mpc.nz,1)];
+                    mpc.bu = [mpc.bu; 1e10*ones(mpc.j*mpc.nz,1)];
                 end
                 for it = 1:mpc.nscu
                     bl = mpc.bl;
                     bu = mpc.bu;
-                    mpc.bl = [bl; -1e12*ones(mpc.j*mpc.nz,1)];
+                    mpc.bl = [bl; -1e10*ones(mpc.j*mpc.nz,1)];
                     mpc.bu = [bu; ExtraFeatures.Bounds.Rmax{it}-ExtraFeatures.b];
                 end
             end
         end
-        function [u, U] = controlCompute(mpc,c,ExtraFeatures,optioptions)
+        function [u, U] = controlCompute(mpc,c,ExtraFeatures)
             mpc.controlPrepare(c,ExtraFeatures)
             if mpc.useInputConstraints || mpc.useInputRateConstraints ||...
                     mpc.useSoftOutputConstraints
-                U = quadprog(mpc.H,mpc.g',[mpc.A; -mpc.A],[mpc.bu -mpc.bl],...
-                    [],[],mpc.l,mpc.u,mpc.u_1,optioptions);
+                U = quadprog(mpc.H,mpc.g',[mpc.A; -mpc.A],[mpc.bu; -mpc.bl],...
+                    [],[],mpc.l,mpc.u,mpc.u_1,mpc.optioptions);
             else
                 U = -mpc.H\mpc.g;
             end
@@ -79,7 +81,7 @@ classdef ModelPredictiveController < matlab.mixin.Copyable
             u = U(1:mpc.nu,1);
             mpc.u_1 = u;
         end
-        function initialize(mpc,W,Ucoeff,n,ExtraFeatures,u_1)
+        function initialize(mpc,W,Ucoeff,n,ExtraFeatures,u_1,optioptions)
             % Function help: initialization of MPC.
             %   Optimization problem is phrased as ||W(Ucoeff*U-c)||_2^2
             %   Soft optimization subproblem minimizes nonnegative
@@ -148,10 +150,12 @@ classdef ModelPredictiveController < matlab.mixin.Copyable
                 mpc.l(mpc.j*mpc.nu+1:...
                     mpc.j*(mpc.nu+mpc.nz*(mpc.nscl+mpc.nscu)),1) = 0;
                 mpc.u(mpc.j*mpc.nu+1:...
-                    mpc.j*(mpc.nu+mpc.nz*(mpc.nscl+mpc.nscu)),1) = 1e12; % Inf
+                    mpc.j*(mpc.nu+mpc.nz*(mpc.nscl+mpc.nscu)),1) = 1e10;     % Inf
             end
             % Correcting nnumerical errors of the Hessian
             mpc.H = (mpc.H+mpc.H')/2;
+            % Optimization options
+            mpc.optioptions = optioptions;
         end
         function preinitialize(mpc,horizon,n)
             % Descriptive numbers
