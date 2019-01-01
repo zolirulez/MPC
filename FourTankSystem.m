@@ -85,9 +85,6 @@ classdef FourTankSystem < matlab.mixin.Copyable
         function addnoise(fts,noise)
             % Function help:
             
-            % DO WE NEED RHO FOR THE LINEAR SYSTEM?
-            % WHAT IS THE CONNECTION BETWEEN G AND LRWW?
-            % TODO
             % Noise
             fts.Lrvv = chol(noise.Rvv,'lower');
             if any(any(noise.Rww))
