@@ -1,7 +1,7 @@
 clearvars
 close all
 fts = FourTankSystem;
-gamma = [0.65; 0.55]; 
+gamma = [0.65; 0.4]; 
 initials.m = zeros(4,1);
 ODEoptions = [];
 fts.initialize(gamma,initials,ODEoptions);
@@ -18,15 +18,13 @@ for it = 1:length(t)-1
     fts.timestep([t(it); t(it+1)],ssInput);
 end
 
-% Plotting
-figure(1)
-plot(fts.record.t,fts.record.x)
-
 % Linearization and discretization
 fts.linearize;
 fts.discretize(Ts);
 
-% The DISTURBANCES ARE NOT CONSIDERED; TODO
+% Poles and zeros
+pzmap(fts.tfd)
+xlim([0.9 1.1])
 
 %% Test for identification
 % simulation around equilibrium
@@ -36,10 +34,6 @@ fts.record.x = [];
 for it = 1:length(t)-1
     fts.timestep([t(it); t(it+1)],ssInput.*[1.05 1 0 0]);
 end
-% Plotting
-figure(2)
-subplot(211)
-plot(fts.record.t,fts.record.x)
 
 y = fts.record.x'-fts.ms;
 y = y(1,:)';
@@ -49,32 +43,30 @@ subplot(212)
 plot(fts.record.t,y)
 
 % ---------- DELETE THIS AFTER EVERYTHING IS ALIGHT
-trafo = tf(2,[1 1 1]);
+trafo = tf(4.09e-5,[1 0.059 0.0006484])
 [y, t] = step(trafo);
 % -------------------------------------
 
-% Initialization
+% Initialization of object for id.
+idobj = IdentificationObject;
+n.np = 3;
+n.nx = 2;
+idobj.initialize(n);
+% Initialization of PI
 pi = ParameterIdentifier;
-Model = @tf_function;
-PartialDerivatives = @tf_der;
-Output = @tf_out;
-OutputPartialDerivatives = @tf_outder;
 Bounds.LowerBound = [];
 Bounds.UpperBound = [];
 ODEoptions = [];
 OPToptions = optimoptions('lsqnonlin','Algorithm','levenberg-marquardt','Jacobian','on',...
     'SpecifyObjectiveGradient',true,'FunctionTolerance',1e-10,...
     'StepTolerance',1e-10);
-pi.initialize(Model,PartialDerivatives,Output,OutputPartialDerivatives,...
-    Bounds,ODEoptions,OPToptions);
+pi.initialize(idobj,n,Bounds,ODEoptions,OPToptions);
 
 % Identification
 ResidualArguments.t = t; %fts.record.t;
 ResidualArguments.y = y;
-ResidualArguments.np = 4;
-ResidualArguments.nx = 2;
 ResidualArguments.x0 = [0; 0];
-InitialParameters = [2; 1; 1; 2];
+InitialParameters = [0.0001; 0.1; 0.001];
 p = pi.identify(ResidualArguments,InitialParameters)
-fts.tfc(1,1).num{1}
-fts.tfc(1,1).den{1}
+% fts.tfc(1,1).num{1}
+% fts.tfc(1,1).den{1}

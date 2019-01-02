@@ -1,6 +1,5 @@
 classdef ParameterIdentifier < handle
     properties
-        residualArguments
         f
         g
         Df_Dxp
@@ -8,55 +7,67 @@ classdef ParameterIdentifier < handle
         LowerBound
         UpperBound
         ODEoptions
-        OPToptions
+        optioptions
+        args
+        nx
+        np
     end
     methods
         function p = identify(pi,ResidualArguments,InitialParameters)
-            % Residual arguments has the fields: t,y,x0,np
-            pi.residualArguments = ResidualArguments;
-            pi.residualArguments.m = size(pi.residualArguments.y,1);
-            p = lsqnonlin(@pi.Residual,InitialParameters,pi.LowerBound,pi.UpperBound,pi.OPToptions);
+            % Residual arguments has the fields: t,y,x0
+            pi.args = ResidualArguments;
+            pi.args.m = size(pi.args.y,1);
+            p = lsqnonlin(@pi.Residual,InitialParameters,pi.LowerBound,pi.UpperBound,pi.optioptions);
         end
         function [residual,jacobian] = Residual(pi,Parameters)
-            t = pi.residualArguments.t;
-            y = pi.residualArguments.y;
-            nx = pi.residualArguments.nx;
-            np = pi.residualArguments.np;
-            x0 = pi.residualArguments.x0;
-            m = pi.residualArguments.m;
-            z0 = [x0; zeros(nx*np,1)]; 
+            z0 = [pi.args.x0; zeros(pi.nx*pi.np,1)];
             % Implementation of integration
-            [t,z] = ode45(@(t,z) pi.ModelAndSensitivity(t,z,Parameters,nx,np),t,z0,pi.ODEoptions);
-            x = z(:,1:nx);
-            S = reshape(z(:,nx+1:end),m*nx,np); % THIS RESHAPE TODO
+            [t,z] = ode15s(@(t,z) pi.ModelAndSensitivity(t,z,Parameters),pi.args.t,z0,pi.ODEoptions);
+            x = z(:,1:pi.nx);
+            try
+                S = reshape(z(:,pi.nx+1:end),pi.args.m*pi.nx,pi.np); % THIS RESHAPE TODO
+            catch
+                disp('')
+            end
             % Residual
-            residual = pi.g(x,Parameters)-y;
-            % Jacobian 
-            jacobian = zeros(m,np);
+            residual = pi.g(x,Parameters)-pi.args.y;
+            % Jacobian
+            jacobian = zeros(pi.args.m,pi.np);
             [Dg_Dx,Dg_Dp] = pi.Dg_Dxp(x,Parameters);
-            for it = 1:m
-                jacobian(it,:) = reshape(Dg_Dx*S(1+(it-1)*nx:it*nx,:)+Dg_Dp,1,np);
+            for it = 1:pi.args.m
+                try
+                jacobian(it,:) =...
+                    reshape(...
+                    Dg_Dx*S(it:pi.args.m:end,:)+Dg_Dp,...
+                    1,pi.np);
+                catch
+                    disp('itt')
+                end
             end
         end
-        function Dz = ModelAndSensitivity(pi,t,z,p,nx,np)
-            x = z(1:nx,1);                          % Unpack states
-            s = z(nx+1:end,1);                      % Unpack sensitivities
-            S = reshape(s,nx,np);                   % Sensitivities as a matrix
+        function Dz = ModelAndSensitivity(pi,t,z,p)
+            x = z(1:pi.nx,1);                          % Unpack states
+            s = z(pi.nx+1:end,1);                      % Unpack sensitivities
+            S = reshape(s,pi.nx,pi.np);                   % Sensitivities as a matrix
             Dx = pi.f(t,x,p);                       % Evaluate the model equations
             [Df_Dx,Df_Dp] = pi.Df_Dxp(t,x,p);       % Evaluate the derivatives
-            DSp = Df_Dx*S + Df_Dp;
-            Dz = [Dx; DSp(:)];                      % Return derivatives as a vector
+            DS = Df_Dx*S + Df_Dp;
+            Dz = [Dx; DS(:)];                      % Return derivatives as a vector
         end
-        function initialize(pi,Model,PartialDerivatives,Output,OutputPartialDerivatives,Bounds,ODEoptions,OPToptions)
-            % input model and derivative model
-            pi.f = Model;
-            pi.Df_Dxp = PartialDerivatives;
-            pi.g = Output;
-            pi.Dg_Dxp = OutputPartialDerivatives;
+        function initialize(pi,IdentificationObject,n,Bounds,ODEoptions,optioptions)
+            % Function help:
+            
+            % Dynamics, measurement, and their partial derivatives
+            pi.f = @IdentificationObject.f;
+            pi.g = @IdentificationObject.g;
+            pi.Df_Dxp = @IdentificationObject.Df_Dxp;
+            pi.Dg_Dxp = @IdentificationObject.Dg_Dxp;
+            pi.nx = n.nx;
+            pi.np = n.np;
             pi.LowerBound = Bounds.LowerBound;
             pi.UpperBound = Bounds.UpperBound;
             pi.ODEoptions = ODEoptions;
-            pi.OPToptions = OPToptions;
+            pi.optioptions = optioptions;
         end
     end
 end
