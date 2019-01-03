@@ -88,63 +88,81 @@ Ucoeff{1} = kf.Markov;
 Ucoeff{2} = mpc.Lambda;
 u_1 = 0;
 optioptions.Algorithm = 'interior-point-convex';
+optioptions.Display = 'off';
 mpc.initialize(W,Ucoeff,n,ExtraFeatures,u_1,optioptions)
 %% Exercise 6: compute time steps
 c = cell(2,1);
 Z = ones(10,1);
 c{1} = Z - kf.b;
 c{2} = mpc.I0*mpc.u_1;
-ExtraFeatures.Bounds.Umin = -100*ones(10,1);
-ExtraFeatures.Bounds.Umax = 100*ones(10,1);
-ExtraFeatures.Bounds.DUmin = -100*ones(10,1); 
-ExtraFeatures.Bounds.DUmax = 100*ones(10,1);
+ExtraFeatures.Bounds.Umin = -2*ones(10,1);
+ExtraFeatures.Bounds.Umax = 2*ones(10,1);
+ExtraFeatures.Bounds.DUmin = -10*ones(10,1); 
+ExtraFeatures.Bounds.DUmax = 10*ones(10,1);
 ExtraFeatures.b = kf.b;
 [u, U] = mpc.controlCompute(c,ExtraFeatures)
 %% Exercise 7: closed loop simulation of MPC
 x = zeros(3,1);
 Lq = chol(noise.Q); 
-itmax = Ts*20;
-record.t = 0:Ts:itmax;
+itmax = Ts*100;
+R = ones(1,itmax/Ts+horizon);
+for it = 1:(itmax/Ts+horizon)
+    if rem(floor(it/(itmax/10)),2)
+        R(:,it) = -R(:,it);
+    end
+end
+record.t = 0:Ts:itmax-Ts+horizon*Ts;
 record.x = zeros(kf.nx,length(record.t));
 record.z = zeros(kf.nz,length(record.t));
 record.u = zeros(kf.nu,length(record.t));
 figure(1)
 clf
-subplot(3,1,1)
-for it = 1:length(record.t)
+subplot(211)
+plot(record.t,R,'b--')
+title('Output z, Z and measurement y with Markov predictions')
+axis([0 itmax+horizon*Ts+Ts -2 2])
+hand11 = animatedline('Color','k');
+hand12 = animatedline('Color','g');
+subplot(212)
+title('Input u, U')
+axis([0 itmax+horizon*Ts+Ts -3 3])
+hand2 = animatedline('Color','k');
+% Initial values
+u = 0;
+z = 0;
+y = 0;
+for it = 1:itmax/Ts
     % Kalman Filter, Markov predictor
     kf.markovPredictor(U,y);
     % Model Predictive Control
-    Z = ones(10,1); % TODO for R
+    Z = R(1,it:it+horizon-1)';
     c{1} = Z-kf.b;
     c{2} = mpc.I0*mpc.u_1;
     ExtraFeatures.b = kf.b;
     [u, U] = mpc.controlCompute(c,ExtraFeatures);
+    % Animation
+    pause(0.1)
+    addpoints(hand11,record.t(it),z)
+    addpoints(hand12,record.t(it),y)
+    addpoints(hand2,record.t(it),u)
+    % Print prediction
+    subplot(211)
+    hold on
+    plot((it+1)*Ts:Ts:(it+kf.j)*Ts,kf.zj,'r')
+    hold off
+    subplot(212)
+    hold on
+    plot((it+1)*Ts:Ts:(it+kf.j)*Ts,U,'r')
+    hold off
     % Physical system and measurement
     v = Lr'*randn(1,1);
     w = Lq'*randn(1,1);
     x = A*x + B*u + G*w;
     z = C*x;
     y = z + v;
-    % Print prediction
-    hold on
-    plot(it*Ts:Ts:(it-1+kf.j)*Ts,kf.zj,'k')
-    hold off
     % Saving results
     record.x(1:kf.nx,it) = x;
     record.z(1:kf.nz,it) = z;
     record.u(1:kf.nz,it) = u;
 end
-subplot(3,1,1)
-hold on
-plot(record.t,record.z,'r')
-hold off
-title('z with markov predictions')
-subplot(3,1,2)
-plot(record.t,record.x,'r')
-title('x')
-subplot(3,1,3)
-plot(record.t,record.u)
-title('u')
-
-% PRODUCE MOVIES TODO
+% Why is the delay? TODO
