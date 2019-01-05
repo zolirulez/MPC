@@ -115,17 +115,16 @@ record.t = 0:Ts:itmax-Ts+horizon*Ts;
 record.x = zeros(kf.nx,length(record.t));
 record.z = zeros(kf.nz,length(record.t));
 record.u = zeros(kf.nu,length(record.t));
-figure(1)
+fighand = figure;
 clf
 subplot(211)
 plot(record.t,R,'b--')
-title('Output z, Z and measurement y with Markov predictions')
 axis([0 itmax+horizon*Ts+Ts -2 2])
 hand11 = animatedline('Color','k');
-hand12 = animatedline('Color','g');
+hand12 = animatedline('Color','r');
 subplot(212)
-title('Input u, U')
 axis([0 itmax+horizon*Ts+Ts -3 3])
+xlabel('Time [-]')
 hand2 = animatedline('Color','k');
 % Initial values
 u = 0;
@@ -140,20 +139,20 @@ for it = 1:itmax/Ts
     c{2} = mpc.I0*mpc.u_1;
     ExtraFeatures.b = kf.b;
     [u, U] = mpc.controlCompute(c,ExtraFeatures);
+    % Print prediction
+    subplot(211)
+    hold on
+    plot((it+1)*Ts-2*Ts:Ts:(it+kf.j)*Ts-2*Ts,kf.zj,'g-')
+    hold off
+    subplot(212)
+    hold on
+    plot((it+1)*Ts-2*Ts:Ts:(it+kf.j)*Ts-2*Ts,U,'g-')
+    hold off
     % Animation
     pause(0.1)
     addpoints(hand11,record.t(it),z)
     addpoints(hand12,record.t(it),y)
     addpoints(hand2,record.t(it),u)
-    % Print prediction
-    subplot(211)
-    hold on
-    plot((it+1)*Ts:Ts:(it+kf.j)*Ts,kf.zj,'r')
-    hold off
-    subplot(212)
-    hold on
-    plot((it+1)*Ts:Ts:(it+kf.j)*Ts,U,'r')
-    hold off
     % Physical system and measurement
     v = Lr'*randn(1,1);
     w = Lq'*randn(1,1);
@@ -165,4 +164,16 @@ for it = 1:itmax/Ts
     record.z(1:kf.nz,it) = z;
     record.u(1:kf.nz,it) = u;
 end
-% Why is the delay? TODO
+addpoints(hand11,record.t(it),z)
+addpoints(hand12,record.t(it),y)
+addpoints(hand2,record.t(it),u)
+subplot(211)
+legend('Reference r','Output z','Measurement y','Markov prediction Z')
+subplot(212)
+legend('Input u','Future input U')
+uistack(hand12,'top');
+uistack(hand11,'top');
+uistack(hand2,'top');
+saveas(fighand,'individual','png')
+% Note: due to the prediction/optimization horizon, we sometimes expect flat lines,
+% though we switch before those. The initial offsets are due to wrong initial values for the controller 

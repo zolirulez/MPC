@@ -1,4 +1,7 @@
 classdef ModelPredictiveController < matlab.mixin.Copyable
+    % Function designed by Zoltan Mark Pinter, DTU student behind s172040,
+    %   for Model Predictive Control Course 02619, and his MSc thesis, 2019
+    %
     % Model Predictive Controller.
     properties
         % Usage mode
@@ -38,6 +41,8 @@ classdef ModelPredictiveController < matlab.mixin.Copyable
     end
     methods
         function controlPrepare(mpc,c,ExtraFeatures)
+            % Function help: time dependent part of initialization
+            
             % Gradients
             mpc.g(1:mpc.j*mpc.nu) = 0;
             for it = 1:mpc.no
@@ -69,6 +74,9 @@ classdef ModelPredictiveController < matlab.mixin.Copyable
             end
         end
         function [u, U] = controlCompute(mpc,c,ExtraFeatures)
+            % Calculates control input from the objective coefficients and
+            %   the extra features
+            
             mpc.controlPrepare(c,ExtraFeatures)
             if mpc.useInputConstraints || mpc.useInputRateConstraints ||...
                     mpc.useSoftOutputConstraints
@@ -158,6 +166,8 @@ classdef ModelPredictiveController < matlab.mixin.Copyable
             mpc.optioptions = optioptions;
         end
         function preinitialize(mpc,horizon,n)
+            % Function help: recording system size and horizon and produce auxuilary matrices
+            
             % Descriptive numbers
             mpc.j = horizon;
             mpc.nu = n.nu;

@@ -1,4 +1,7 @@
 classdef KalmanFilter < handle
+    % Function designed by Zoltan Mark Pinter, DTU student behind s172040,
+    %   for Model Predictive Control Course 02619, and his MSc thesis, 2019
+    %
     % This Kalman filter is an object for solving general computations
     %   required by a Kalman Filter. Note that the object does not work
     %   like a single function, therefore for different applications

@@ -1,31 +1,37 @@
 classdef FourTankSystem < matlab.mixin.Copyable
+    % Function designed by Zoltan Mark Pinter, DTU student behind s172040,
+    %   for Model Predictive Control Course 02619, and his MSc thesis, 2019
+    %
     properties
-        t
-        ODEoptions
-        record
-        m
-        gamma
-        a
-        A
-        rho
-        h
-        g
-        qi
-        qo
-        ms
-        hs
-        m0
-        Ts
-        ssc
-        ssd
-        tfc
-        tfd
-        Lrvv
-        Lrww
+        % Auxuilary
+        t               % Last time instant
+        ODEoptions      % Options for ODE solver
+        record          % Record of variables
+        % Physical quantities
+        m               % Mass
+        gamma           % Flow separation constant
+        a               % Tank outlet area
+        A               % Tank base area
+        rho             % Density
+        h               % Water height level
+        g               % Gravity
+        qi              % Volume flow inlet
+        qo              % Volume flow outlet
+        ms              % Mass in steady state
+        hs              % Height in steady state
+        m0              % Initial mass
+        % System analysis
+        Ts              % Sampling time
+        ssc             % Continuous linear state space model
+        ssd             % Discrete linear state space model
+        tfc             % Continuous transfer function
+        tfd             % Discrete transfer function
+        Lrvv            % Measurement noise gain
+        Lrww            % Process noise gain
     end
     methods
         function timestep(fts,t,inputs)
-            % Function help: 
+            % Function help: Integrates system for given time interval
             
             inputs = inputs + fts.Lrww*randn(4,1);
             x = fts.m;
@@ -61,7 +67,8 @@ classdef FourTankSystem < matlab.mixin.Copyable
             Dx = fts.process(0,x,F);
         end
         function initialize(fts,gamma,initials,ODEoptions)
-            % Function help:
+            % Function help: initialized the object with gamma, initial
+            %   for state and options for ODE solver
             
             fts.a = 1.2272;      % [cm2] Area of outlet pipe 
             fts.A = 380.1327;    % [cm2] Cross sectional area of tank
@@ -83,7 +90,8 @@ classdef FourTankSystem < matlab.mixin.Copyable
             fts.record = Record;
         end
         function addnoise(fts,noise)
-            % Function help:
+            % Function help: Adds noise with Rvv, and optionally Rww to the
+            %   deterministic system
             
             % Noise
             fts.Lrvv = chol(noise.Rvv,'lower');
@@ -100,13 +108,18 @@ classdef FourTankSystem < matlab.mixin.Copyable
             fts.record.meas = [];
         end
         function steadyState(fts,ssInput,initialGuess)
+            % Function help: calculates steady state mass and height from
+            %   steady state input
+            
             fts.ms = fsolve(@fts.steadyStateProcess,initialGuess,[],ssInput);
             fts.hs = fts.ms/(fts.A*fts.rho);
             % Initial values refill
             fts.m = fts.m0;
         end
         function linearize(fts)
-            %T = (fts.A/fts.a)*sqrt(2*fts.hs/fts.g);
+            % Linearizes the sytem and creates state space model and
+            %   transfer function
+            
             T = sqrt(fts.ms/(fts.rho*fts.g/fts.A/2))/fts.a;
             System.A = [-1/T(1) 0 1/T(3) 0;0 -1/T(2) 0 1/T(4);0 0 -1/T(3) 0;0 0 0 -1/T(4)];
             System.B = [fts.rho*fts.gamma(1) 0;0 fts.rho*fts.gamma(2);...
@@ -125,6 +138,8 @@ classdef FourTankSystem < matlab.mixin.Copyable
             fts.tfc = tf(ss(System.A,System.B,System.Cz,zeros(2,2)));
         end
         function discretize(fts,Ts)
+            % Discretizes the system for given sampling time.
+            
             System = fts.ssc;
             System.Ts = Ts;
             if any(any(fts.Lrvv)) || any(any(fts.Lrww))
